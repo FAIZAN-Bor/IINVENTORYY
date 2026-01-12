@@ -2,7 +2,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { SalesTaxInvoiceItem, SalesTaxInvoice } from '../../../types';
 import { parties as mockParties, inventoryItems as defaultInventory } from '../../../data/mockData';
-import QasimSewingLogo from '../../../images/Qasim Sewing.jpeg';
+import QasimSewingLogo from '../../../images/Qasim.jpeg';
 
 export default function SalesTaxInvoicePage() {
     const navigate = useNavigate();
@@ -32,6 +32,29 @@ export default function SalesTaxInvoicePage() {
     const [showKgsModal, setShowKgsModal] = useState(false);
     const [kgsModalItemId, setKgsModalItemId] = useState<string | null>(null);
     const [kgsRate, setKgsRate] = useState('');
+
+    // History Modal State
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [historySearch, setHistorySearch] = useState('');
+    const [savedInvoices, setSavedInvoices] = useState<SalesTaxInvoice[]>([]);
+    const [currentEditingId, setCurrentEditingId] = useState<string | null>(null);
+
+    // Initialize editing ID from params if available
+    useEffect(() => {
+        if (editingId) {
+            setCurrentEditingId(editingId);
+        }
+    }, [editingId]);
+
+    // Load saved invoices for history
+    useEffect(() => {
+        if (showHistoryModal) {
+            const saved = localStorage.getItem('salesTaxInvoices');
+            if (saved) {
+                setSavedInvoices(JSON.parse(saved).reverse()); // Show newest first
+            }
+        }
+    }, [showHistoryModal]);
 
 
 
@@ -78,6 +101,21 @@ export default function SalesTaxInvoicePage() {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [navigate]);
+
+    // Click outside handler for item dropdowns
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (showItemDropdown) {
+                const target = event.target as HTMLElement;
+                if (!target.closest('.item-search-wrapper')) {
+                    setShowItemDropdown(null);
+                }
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showItemDropdown]);
 
     const generateRefNo = () => {
         const saved = localStorage.getItem('salesTaxInvoices');
@@ -253,7 +291,7 @@ export default function SalesTaxInvoicePage() {
         }
 
         const invoice: SalesTaxInvoice = {
-            id: isEditMode && editingId ? editingId : Date.now().toString(),
+            id: isEditMode && currentEditingId ? currentEditingId : Date.now().toString(),
             voucherNo: refNo,
             partyCode,
             partyName,
@@ -274,14 +312,14 @@ export default function SalesTaxInvoicePage() {
         const saved = localStorage.getItem('salesTaxInvoices');
         let invoices = saved ? JSON.parse(saved) : [];
 
-        if (isEditMode && editingId) {
+        if (isEditMode && currentEditingId) {
             // Update existing invoice
             invoices = invoices.map((inv: SalesTaxInvoice) =>
-                inv.id === editingId ? invoice : inv
+                inv.id === currentEditingId ? invoice : inv
             );
             localStorage.setItem('salesTaxInvoices', JSON.stringify(invoices));
             alert('Sales Tax Invoice updated successfully!');
-            navigate('/dashboard/sales-tax-invoice-history');
+            // navigate('/dashboard/sales-tax-invoice-history');
         } else {
             // Create new invoice
             invoices.push(invoice);
@@ -300,8 +338,65 @@ export default function SalesTaxInvoicePage() {
         }
     };
 
+    const handleSelectInvoice = (invoice: SalesTaxInvoice) => {
+        setIsEditMode(true);
+        setCurrentEditingId(invoice.id);
+
+        // Load data
+        setRefNo(invoice.voucherNo);
+        setDate(invoice.date);
+        setPartyCode(invoice.partyCode);
+        setPartyName(invoice.partyName);
+        setPartySearch(invoice.partyName);
+        setPartyAddress(invoice.partyAddress || '');
+        setPartyNTN(invoice.partyNTN || '');
+        setPartyGST(invoice.partyGST || '');
+        setItems(invoice.items);
+
+        setShowHistoryModal(false);
+    };
+
+    const filteredHistory = savedInvoices.filter(inv =>
+        inv.voucherNo?.toLowerCase().includes(historySearch.toLowerCase()) ||
+        inv.partyName?.toLowerCase().includes(historySearch.toLowerCase()) ||
+        inv.date?.includes(historySearch)
+    );
+
     const handlePrint = () => {
         window.print();
+    };
+
+    const handleDelete = () => {
+        if (!isEditMode || !currentEditingId) return;
+
+        if (window.confirm('Are you sure you want to delete this invoice?')) {
+            const saved = localStorage.getItem('salesTaxInvoices');
+            if (saved) {
+                const invoices = JSON.parse(saved);
+                const updated = invoices.filter((inv: SalesTaxInvoice) => inv.id !== currentEditingId);
+                localStorage.setItem('salesTaxInvoices', JSON.stringify(updated));
+
+                // Update local history list if modal is open (optional, but good practice if we had shared state)
+                setSavedInvoices(updated.reverse());
+
+                alert('Invoice deleted successfully');
+                handleNewInvoice();
+            }
+        }
+    };
+
+    const handleNewInvoice = () => {
+        setIsEditMode(false);
+        setCurrentEditingId(null);
+        setPartyCode('');
+        setPartyName('');
+        setPartyAddress('');
+        setPartyNTN('');
+        setPartyGST('');
+        setPartySearch('');
+        setItems([]);
+        setDate(new Date().toISOString().split('T')[0]);
+        generateRefNo();
     };
 
     if (selectedCompany !== 'QASIM SEWING MACHINE') {
@@ -310,6 +405,69 @@ export default function SalesTaxInvoicePage() {
 
     return (
         <div className="space-y-6">
+            {/* History Modal */}
+            {showHistoryModal && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print"
+                    onClick={() => setShowHistoryModal(false)}
+                >
+                    <div
+                        className="bg-white rounded-xl p-6 shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-bold">Invoice History</h3>
+                            <button onClick={() => setShowHistoryModal(false)} className="text-gray-500 hover:text-gray-700">×</button>
+                        </div>
+
+                        <input
+                            type="text"
+                            placeholder="Search by Ref #, Party Name, or Date..."
+                            value={historySearch}
+                            onChange={(e) => setHistorySearch(e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                        />
+
+                        <div className="overflow-y-auto flex-1">
+                            {filteredHistory.length > 0 ? (
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-gray-100 sticky top-0">
+                                        <tr>
+                                            <th className="p-3 border-b">Ref #</th>
+                                            <th className="p-3 border-b">Date</th>
+                                            <th className="p-3 border-b">Party</th>
+                                            <th className="p-3 border-b text-right">Amount</th>
+                                            <th className="p-3 border-b text-center">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filteredHistory.map(inv => (
+                                            <tr key={inv.id} className="hover:bg-blue-50 transition-colors border-b">
+                                                <td className="p-3 font-semibold">{inv.voucherNo}</td>
+                                                <td className="p-3">{new Date(inv.date).toLocaleDateString('en-GB')}</td>
+                                                <td className="p-3">{inv.partyName}</td>
+                                                <td className="p-3 text-right font-bold">Rs. {inv.grandTotal.toLocaleString()}</td>
+                                                <td className="p-3 text-center">
+                                                    <button
+                                                        onClick={() => handleSelectInvoice(inv)}
+                                                        className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="text-center py-8 text-gray-500">No invoices found matching "{historySearch}"</div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Print Styles */}
             <style>{`
         @media print {
@@ -323,6 +481,9 @@ export default function SalesTaxInvoicePage() {
                 visibility: visible;
             }
             
+            /* Print View Styling */
+            /* Add top padding to clear pre-printed header (~45mm) */
+            /* Print View Styling */
             #invoice-print-view {
                 position: absolute;
                 left: 0;
@@ -331,29 +492,45 @@ export default function SalesTaxInvoicePage() {
                 background: white;
             }
             
-            @page { 
-                size: A4 portrait; 
-                margin: 10mm; 
+            .invoice-header-container {
+                position: relative;
+                width: 100%;
+                height: 50mm; /* Fixed height to crop A4 scan whitespace */
+                overflow: hidden;
+                margin-bottom: 2mm;
             }
-            body { 
-                background: white; 
-                -webkit-print-color-adjust: exact; 
-                margin: 0;
+            
+            .header-image {
+                width: 100%;
+                height: 100%;
+                object-fit: cover; /* Crop bottom */
+                object-position: top;
+                display: block;
+            }
+            }
+            
+            .invoice-info { 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: flex-end; 
+                margin-bottom: 5mm; 
+                font-size: 11pt; 
+                padding-top: 5mm;
             }
 
-            /* Print View Styling (Scoped to #invoice-print-view implicitly by usage) */
-            .header { text-align: center; border-bottom: 2px solid black; padding-bottom: 5mm; margin-bottom: 3mm; }
-            .header img { max-width: 200px; height: auto; }
-            .header-text { font-size: 10pt; color: #333; }
-            
-            .invoice-info { display: flex; justify-content: space-between; margin-bottom: 3mm; font-size: 11pt; }
+            .invoice-info { 
+                display: flex; 
+                justify-content: center; 
+                margin-bottom: 5mm; 
+                font-size: 13pt; 
+            }
             
             .party-details { margin-bottom: 3mm; font-size: 11pt; }
             .party-row { display: flex; margin-bottom: 2mm; }
             .party-label { width: 90px; font-weight: bold; }
             .party-value { border-bottom: 1px solid black; flex: 1; padding-left: 3mm; }
             
-            table { width: 100%; border-collapse: collapse; page-break-inside: auto; font-size: 10pt; }
+            table { width: 100%; border-collapse: collapse; page-break-inside: auto; font-size: 13pt; }
             thead { display: table-header-group; }
             tbody { display: table-row-group; }
             tr { page-break-inside: avoid; page-break-after: auto; }
@@ -366,7 +543,7 @@ export default function SalesTaxInvoicePage() {
             .text-left { text-align: left; }
             .font-bold { font-weight: bold; }
             
-            .footer { margin-top: 8mm; text-align: center; font-style: italic; font-size: 10pt; }
+            .footer { margin-top: 8mm; text-align: center; font-style: italic; font-size: 13pt; }
             .signatures { display: flex; justify-content: space-between; margin-top: 15mm; font-size: 11pt; }
             .signature-line { border-top: 1px solid black; width: 120px; padding-top: 3mm; text-align: center; }
         }
@@ -383,7 +560,7 @@ export default function SalesTaxInvoicePage() {
                         <h3 className="text-lg font-bold mb-4">Calculate Weight (Kgs)</h3>
                         <p className="text-sm text-gray-600 mb-4">
                             Enter the rate per Kg. Weight will be calculated as:<br />
-                            <strong>Kgs = Value Exc. ST Ã· Rate</strong>
+                            <strong>Kgs = Value Exc. ST ÷ Rate</strong>
                         </p>
                         <div className="mb-4">
                             <label className="block text-sm font-semibold mb-2">Rate per Kg:</label>
@@ -414,8 +591,6 @@ export default function SalesTaxInvoicePage() {
                 </div>
             )}
 
-
-
             {/* Header */}
             <div className="flex justify-between items-center no-print">
                 <div>
@@ -423,10 +598,10 @@ export default function SalesTaxInvoicePage() {
                     <p className="text-gray-600 mt-1">GST/Sales Tax compliant invoices for Qasim Sewing Machine</p>
                 </div>
                 <button
-                    onClick={() => navigate('/dashboard/sales')}
-                    className="bg-white hover:bg-gray-100 text-gray-700 border-2 border-gray-300 px-6 py-3 rounded-lg font-semibold transition"
+                    onClick={() => setShowHistoryModal(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white border-2 border-purple-800 px-6 py-3 rounded-lg font-semibold transition flex items-center gap-2"
                 >
-                    â† Back to Sales
+                    <span>📜</span> History
                 </button>
             </div>
 
@@ -570,14 +745,14 @@ export default function SalesTaxInvoicePage() {
                                 <th className="border border-black px-2 py-2 w-24">Value Exc. ST</th>
                                 <th className="border border-black px-2 py-2 w-20">S.T.Amt<br />18.00%</th>
                                 <th className="border border-black px-2 py-2 w-24">Amt. Incl.<br />S.T.</th>
-                                <th className="border border-black px-2 py-2 w-12 no-print">Ã—</th>
+                                <th className="border border-black px-2 py-2 w-12 no-print">×</th>
                             </tr>
                         </thead>
                         <tbody>
                             {items.map((item, index) => (
                                 <tr key={item.id} className="hover:bg-gray-50">
                                     <td className="border border-black px-2 py-1 text-center">{index + 1}</td>
-                                    <td className="border border-black px-2 py-1 relative">
+                                    <td className="border border-black px-2 py-1 relative item-search-wrapper">
                                         <input
                                             type="text"
                                             value={item.itemName}
@@ -605,7 +780,7 @@ export default function SalesTaxInvoicePage() {
                                                             <div className="font-semibold text-sm text-gray-900">{inv.articleCode}</div>
                                                             <div className="text-xs text-gray-600">{inv.name || inv.description}</div>
                                                             <div className="text-xs text-green-600 font-semibold">
-                                                                Sale Price: â‚¨ {inv.salePrice || inv.rate || 0}
+                                                                Sale Price: Rs. {inv.salePrice || inv.rate || 0}
                                                             </div>
                                                         </div>
                                                     ))
@@ -663,7 +838,7 @@ export default function SalesTaxInvoicePage() {
                                             onClick={() => removeItem(item.id)}
                                             className="text-red-600 hover:text-red-800 font-bold text-lg"
                                         >
-                                            Ã—
+                                            ×
                                         </button>
                                     </td>
                                 </tr>
@@ -692,7 +867,7 @@ export default function SalesTaxInvoicePage() {
                             + Add Item
                         </button>
                         <span className="ml-4 text-sm text-gray-500">
-                            ðŸ’¡ Click on Kgs cell to calculate weight from rate
+                            💡 Click on Kgs cell to calculate weight from rate
                         </span>
                     </div>
                 </div>
@@ -713,22 +888,40 @@ export default function SalesTaxInvoicePage() {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex justify-center gap-4 mt-8 no-print">
+                <div className="flex justify-center gap-4 mt-8 no-print flex-wrap">
                     <button
                         onClick={handleSave}
-                        className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-bold shadow-lg transition"
+                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-bold shadow-lg transition flex items-center gap-2"
                     >
-                        ðŸ’¾ Save Invoice
+                        <span>💾</span> Save
                     </button>
+
                     <button
                         onClick={handlePrint}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-bold shadow-lg transition"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-bold shadow-lg transition flex items-center gap-2"
                     >
-                        ðŸ–¨ï¸ Print Invoice
+                        <span>🖨️</span> Print
                     </button>
+
+                    {isEditMode && (
+                        <button
+                            onClick={handleDelete}
+                            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold shadow-lg transition flex items-center gap-2"
+                        >
+                            <span>🗑️</span> Delete
+                        </button>
+                    )}
+
+                    <button
+                        onClick={handleNewInvoice}
+                        className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg transition flex items-center gap-2"
+                    >
+                        <span>✨</span> Clear / New
+                    </button>
+
                     <button
                         onClick={() => navigate('/dashboard')}
-                        className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-3 rounded-lg font-bold shadow-lg transition"
+                        className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-bold shadow-lg transition"
                     >
                         Exit
                     </button>
@@ -736,22 +929,26 @@ export default function SalesTaxInvoicePage() {
             </div>
             {/* Native Print View - Hidden on Screen, Visible on Print */}
             <div id="invoice-print-view" className="hidden print:block">
-                <div className="header">
-                    <img src={QasimSewingLogo} alt="Qasim Sewing Machine" />
-                    <div className="header-text">
-                        <strong>Industrial Sewing Machine Parts</strong><br />
-                        P-608 BISMILLAH CENTER, JINNAH COLONY, FAISALABAD. PH: 041-2603040, 0302-8603040, E-mail: qasimsewing@gmail.com
-                    </div>
+
+
+                <div className="invoice-header-container">
+                    <img src={QasimSewingLogo} alt="Header" className="header-image" />
                 </div>
 
                 <div className="invoice-info">
-                    <div><strong>Ref:</strong> {refNo}</div>
-                    <div className="text-center">
-                        <strong>SALES-TAX INVOICE</strong><br />
+                    <div style={{ width: '200px' }}>
+                        <strong>Ref:</strong> <span style={{ textDecoration: 'underline', fontWeight: 'bold' }}>&nbsp;&nbsp;{refNo}&nbsp;&nbsp;</span>
+                    </div>
+
+                    <div className="text-center" style={{ flex: 1 }}>
+                        <span className="font-bold text-xl under">SALES-TAX INVOICE</span><br />
                         Sales Tax Reg # <strong>{salesTaxRegNo}</strong><br />
                         NTN # <strong>{ntnNo}</strong>
                     </div>
-                    <div><strong>Date:</strong> {new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+
+                    <div style={{ width: '200px', textAlign: 'right' }}>
+                        <strong>Date:</strong> <span style={{ textDecoration: 'underline', fontWeight: 'bold' }}>&nbsp;&nbsp;{new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}&nbsp;&nbsp;</span>
+                    </div>
                 </div>
 
                 <div className="party-details">

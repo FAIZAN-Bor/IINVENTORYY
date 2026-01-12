@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QasimSewingLogo from '../images/Qasim.jpeg';
 
 // Company configuration helper
 
@@ -438,72 +439,100 @@ export const generateQuotationPDF = (quotation: {
   });
 
   const pageWidth = 210;
-  const marginLeft = 15;
-  const marginRight = 195;
+  // const marginLeft = 15;
+  // const marginRight = 195;
 
-  // Company Name Header
-  doc.setFontSize(20);
-  doc.setFont('helvetica', 'bold');
-  doc.text(quotation.companyName, pageWidth / 2, 20, { align: 'center' });
+  // 1. Header Image
+  if (quotation.companyName === 'QASIM SEWING MACHINE' || quotation.companyName === 'Qasim Sewing Machine') {
+    try {
+      doc.addImage(QasimSewingLogo, 'JPEG', 0, 0, 210, 40); // Full width header, height 40mm
+    } catch (e) {
+      console.error("Error adding logo to PDF", e);
+    }
+  } else {
+    // Fallback text header
+    doc.setFontSize(26);
+    doc.setFont('helvetica', 'bold');
+    doc.text(quotation.companyName, pageWidth / 2, 20, { align: 'center' });
+    doc.setLineWidth(0.5);
+    doc.line(20, 25, 190, 25);
+  }
 
-  // Party and Date Row
-  doc.setFillColor(200, 200, 200);
-  doc.rect(marginLeft, 25, marginRight - marginLeft, 10, 'F');
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  doc.text(`Party: ${quotation.partyName}`, marginLeft + 3, 31);
+  let currentY = 50; // Start below the header
 
-  // Date box
-  doc.setFillColor(0, 200, 200);
-  doc.rect(marginRight - 50, 25, 50, 10, 'F');
-  doc.text(`Date: ${new Date(quotation.date).toLocaleDateString('en-GB')}`, marginRight - 47, 31);
-
-  // QUOTATION Title
-  doc.setFillColor(255, 230, 0);
-  doc.rect(marginLeft, 36, marginRight - marginLeft, 10, 'F');
+  // 2. QUOTATION Title
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text('QUOTATION', pageWidth / 2, 43, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  doc.text('QUOTATION', pageWidth / 2, currentY, { align: 'center' });
+  doc.setLineWidth(0.5);
+  doc.line(pageWidth / 2 - 20, currentY + 2, pageWidth / 2 + 20, currentY + 2); // Underline
 
-  // Table
+  currentY += 15;
+
+  // 3. Customer / Party and Date
+  const leftX = 15;
+  const rightX = 140;
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Customer / Party:', leftX, currentY);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(14);
+  doc.text(quotation.partyName, leftX, currentY + 7);
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Date:', rightX, currentY, { align: 'right' });
+
+  doc.setFontSize(14);
+  doc.text(new Date(quotation.date).toLocaleDateString('en-GB'), rightX, currentY + 7, { align: 'right' });
+
+  currentY += 15;
+
+  // 4. Items Table
   autoTable(doc, {
-    startY: 48,
-    head: [['SR#', 'Description', 'Qty', 'UOM', 'RATES', 'BRAND', 'REMARKS']],
+    startY: currentY,
+    head: [['SR#', 'DESCRIPTION', 'QTY', 'UOM', 'RATE', 'BRAND', 'REMARKS']],
     body: quotation.items.map((item, index) => [
       (index + 1).toString(),
       item.description,
       item.quantity.toString(),
       item.unit,
       item.rate.toString(),
-      item.brand || '',
-      item.remarks || ''
+      item.brand || '-',
+      item.remarks || '-'
     ]),
-    theme: 'grid',
+    theme: 'plain', // Match the simple print style
+    styles: {
+      fontSize: 10,
+      cellPadding: 2,
+      lineColor: [0, 0, 0],
+      lineWidth: 0.1,
+      textColor: [0, 0, 0],
+      valign: 'top',
+      overflow: 'linebreak'
+    },
     headStyles: {
-      fillColor: [255, 255, 255],
+      fillColor: [240, 240, 240], // Light gray header
       textColor: [0, 0, 0],
       fontStyle: 'bold',
-      lineWidth: 0.5,
-      lineColor: [0, 0, 0]
-    },
-    bodyStyles: {
-      textColor: [0, 0, 0],
-      lineWidth: 0.5,
-      lineColor: [0, 0, 0]
+      halign: 'center'
     },
     columnStyles: {
-      0: { cellWidth: 12 },
-      1: { cellWidth: 60 },
-      2: { cellWidth: 15 },
-      3: { cellWidth: 18 },
-      4: { cellWidth: 25 },
-      5: { cellWidth: 25 },
-      6: { cellWidth: 25 }
-    }
+      0: { cellWidth: 12, halign: 'center' }, // SR
+      1: { cellWidth: 65, halign: 'left' },   // Desc
+      2: { cellWidth: 15, halign: 'center' }, // Qty
+      3: { cellWidth: 15, halign: 'center' }, // UOM
+      4: { cellWidth: 20, halign: 'center' }, // Rate
+      5: { cellWidth: 20, halign: 'center' }, // Brand
+      6: { cellWidth: 35, halign: 'center' }  // Remarks
+    },
+    margin: { left: 10, right: 10 }
   });
 
-  doc.save(`quotation_${quotation.quotationNo}_${Date.now()}.pdf`);
+  doc.save(`Quotation_${quotation.partyName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`);
 };
 
 export const generateQuotationRequestPDF = (quotation: any) => {
