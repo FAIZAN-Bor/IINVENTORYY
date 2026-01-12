@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased bg-white text-gray-900;
+  }
+}
+
+@layer utilities {
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+  }
+  
+  .animate-fadeIn {
+    animation: fadeIn 0.5s ease-in;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Print Styles - Black and White */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  * {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  
+  .print\\:hidden {
+    display: none !important;
+  }
+  
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  
+  th, td {
+    border: 1px solid black !important;
+    padding: 8px !important;
+    text-align: left;
+  }
+  
+  th {
+    background: #f0f0f0 !important;
+    font-weight: bold !important;
+  }
+}

@@ -1,0 +1,35 @@
+These are requirements for this project.
+
+Company Names:
+1. Q.S Traders
+2. Qasim Sewing Machine
+3. Arfa Trading Company
+4. Qasim & Sons
+
+I want to make these changes in my project. 
+
+Now just make and focus on frontend.
+
+Make sure proper alignement in all pages. Means all entities are properly linked according to all pages. 
+
+GUI:
+
+Login:
+- Create 4 credentials. First for the company name Qasim Sewing Machine, Q.S Traders, Arfa Trading Company, Qasim & Sons. When I log in from specific credentials, the next pages are properly aligned with only this specific Company name.
+
+Inventory:
+- Add the image field also of the object. Add the option that user can also add images also. 
+
+Low Stock:
+- Add a print button to print all low stocks items. Make sure the printed page contain only black and white colors.
+
+Qu0tation:
+- Change the Action word to Brand. Also add Remarks field/column in it.
+- Make sure the printing functionality is properly working. There are bugs in the print generation. Make sure it is properly aligned.in the page all the columns.
+
+Reports:
+- Add a option of Ledger. Create Ledger properly.
+- Make some adjustments in Sales Report. Make an option to view every details of sales for that specific person using different fields. When I s 
+
+Sales Invoice:
+- I want to update sales Invoive page according to my needs. 
