@@ -471,6 +471,11 @@ export default function SalesTaxInvoicePage() {
             {/* Print Styles */}
             <style>{`
         @media print {
+
+                @page {
+                        size: auto;
+                        margin: 0mm;
+                    }
             /* Hide everything by default (Screen content) */
             body * {
                 visibility: hidden;
@@ -488,7 +493,10 @@ export default function SalesTaxInvoicePage() {
                 position: absolute;
                 left: 0;
                 top: 0;
-                width: 210mm;
+                width: 100%;
+                margin: 0;
+                padding: 10mm;
+                min-height: auto !important;
                 background: white;
             }
             
@@ -497,7 +505,8 @@ export default function SalesTaxInvoicePage() {
                 width: 100%;
                 height: 50mm; /* Fixed height to crop A4 scan whitespace */
                 overflow: hidden;
-                margin-bottom: 2mm;
+                margin-bottom: 0mm;
+                
             }
             
             .header-image {
@@ -515,7 +524,7 @@ export default function SalesTaxInvoicePage() {
                 align-items: flex-end; 
                 margin-bottom: 5mm; 
                 font-size: 11pt; 
-                padding-top: 5mm;
+                padding-top: 0mm;
             }
 
             .invoice-info { 
@@ -530,7 +539,7 @@ export default function SalesTaxInvoicePage() {
             .party-label { width: 90px; font-weight: bold; }
             .party-value { border-bottom: 1px solid black; flex: 1; padding-left: 3mm; }
             
-            table { width: 100%; border-collapse: collapse; page-break-inside: auto; font-size: 13pt; }
+            table { width: 100%; border-collapse: collapse; page-break-inside: auto; font-size: 11pt; }
             thead { display: table-header-group; }
             tbody { display: table-row-group; }
             tr { page-break-inside: avoid; page-break-after: auto; }
@@ -877,16 +886,6 @@ export default function SalesTaxInvoicePage() {
                     This is a system generated invoice & does not require any sign and stamp.
                 </div>
 
-                {/* Signature Section */}
-                <div className="flex justify-between mt-12 text-sm">
-                    <div className="border-t border-black pt-2 w-40 text-center">
-                        <span className="italic">Authorised Signature</span>
-                    </div>
-                    <div className="border-t border-black pt-2 w-40 text-center">
-                        <span className="italic">Consumer</span>
-                    </div>
-                </div>
-
                 {/* Action Buttons */}
                 <div className="flex justify-center gap-4 mt-8 no-print flex-wrap">
                     <button
@@ -1016,10 +1015,7 @@ export default function SalesTaxInvoicePage() {
                     This is a system generated invoice & does not require any sign and stamp.
                 </div>
 
-                <div className="signatures">
-                    <div className="signature-line">Authorised Signature</div>
-                    <div className="signature-line">Consumer</div>
-                </div>
+
             </div>
         </div>
     );

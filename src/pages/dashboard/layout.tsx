@@ -58,7 +58,9 @@ export default function DashboardLayout() {
     // Conditional item for Qasim Sewing Machine only
     ...(selectedCompany === 'QASIM SEWING MACHINE' ? [
       { icon: '🧾', label: 'Sales Tax Invoice', path: '/dashboard/sales-tax-invoice' },
-      { icon: '📑', label: 'Tax Invoice History', path: '/dashboard/sales-tax-invoice-history' }
+      { icon: '📑', label: 'Tax Invoice History', path: '/dashboard/sales-tax-invoice-history' },
+      { icon: '🚚', label: 'Delivery Challan', path: '/dashboard/delivery-challan' },
+      { icon: '📜', label: 'Delivery History', path: '/dashboard/delivery-challan-history' }
     ] : [])
   ];
 

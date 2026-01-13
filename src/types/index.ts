@@ -244,3 +244,23 @@ export interface SalesTaxInvoice {
   createdBy: string;
   companyName: string;
 }
+
+export interface ChallanItem {
+  id: string;
+  itemName: string;
+  poNumber: string;
+  demandNumber: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface DeliveryChallan {
+  id: string;
+  dcNumber: string;
+  date: string;
+  partyName: string;
+  partyAddress: string;
+  courierName: string;
+  items: ChallanItem[];
+  totalQty: number;
+}

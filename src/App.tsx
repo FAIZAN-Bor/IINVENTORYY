@@ -19,6 +19,8 @@ const Purchases = lazy(() => import('./pages/dashboard/purchases/page'));
 const PurchaseHistory = lazy(() => import('./pages/dashboard/purchase-history/page'));
 const SalesTaxInvoice = lazy(() => import('./pages/dashboard/sales-tax-invoice/page'));
 const SalesTaxInvoiceHistory = lazy(() => import('./pages/dashboard/sales-tax-invoice-history/page'));
+const DeliveryChallan = lazy(() => import('./pages/dashboard/delivery-challan/page'));
+const DeliveryChallanHistory = lazy(() => import('./pages/dashboard/delivery-challan-history/page'));
 
 const Parties = lazy(() => import('./pages/dashboard/parties/page'));
 const PartyNew = lazy(() => import('./pages/dashboard/parties/new/page'));
@@ -68,6 +70,8 @@ function App() {
           <Route path="sales-tax-invoice" element={<SalesTaxInvoice />} />
           <Route path="sales-tax-invoice/:id" element={<SalesTaxInvoice />} />
           <Route path="sales-tax-invoice-history" element={<SalesTaxInvoiceHistory />} />
+          <Route path="delivery-challan" element={<DeliveryChallan />} />
+          <Route path="delivery-challan-history" element={<DeliveryChallanHistory />} />
 
         </Route>
       </Routes>
