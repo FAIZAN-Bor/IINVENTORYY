@@ -28,6 +28,7 @@ const PartyDetails = lazy(() => import('./pages/dashboard/parties/[id]/page'));
 const Suppliers = lazy(() => import('./pages/dashboard/suppliers/page'));
 const SupplierNew = lazy(() => import('./pages/dashboard/suppliers/new/page'));
 const SupplierDetails = lazy(() => import('./pages/dashboard/suppliers/[id]/page'));
+const SupplierLedger = lazy(() => import('./pages/dashboard/suppliers/[id]/ledger/page'));
 
 const LoadingFallback = () => (
   <div style={{
@@ -63,6 +64,7 @@ function App() {
           <Route path="suppliers" element={<Suppliers />} />
           <Route path="suppliers/new" element={<SupplierNew />} />
           <Route path="suppliers/:id" element={<SupplierDetails />} />
+          <Route path="suppliers/:id/ledger" element={<SupplierLedger />} />
           <Route path="sales" element={<Sales />} />
           <Route path="sales-history" element={<SalesHistory />} />
           <Route path="purchases" element={<Purchases />} />

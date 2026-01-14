@@ -61,6 +61,19 @@ export default function SupplierDetailsPage() {
       loadSupplier();
       loadTransactions();
     }
+
+    // Listen for supplier data changes (e.g., when purchase is edited)
+    const handleSupplierDataChange = () => {
+      if (id) {
+        loadSupplier();
+        loadTransactions();
+      }
+    };
+
+    window.addEventListener('supplierDataChanged', handleSupplierDataChange);
+    return () => {
+      window.removeEventListener('supplierDataChanged', handleSupplierDataChange);
+    };
   }, [id]);
 
   const loadSupplier = () => {
@@ -95,9 +108,20 @@ export default function SupplierDetailsPage() {
       const foundSupplier = parties.find(p => p.id === id);
       if (foundSupplier && foundSupplier.transactions) {
         // Filter transactions by current company
-        const companyTransactions = foundSupplier.transactions.filter((t: any) =>
-          t.companyName === currentCompany
-        );
+        // Only show CREDIT purchases (termOfSale === 'CREDIT' or paymentStatus === 'unpaid') and payments
+        const companyTransactions = foundSupplier.transactions.filter((t: any) => {
+          if (t.companyName !== currentCompany) return false;
+
+          // Always show payments
+          if (t.type === 'payment') return true;
+
+          // For purchases, only show CREDIT ones (unpaid)
+          if (t.type === 'purchase') {
+            return t.termOfSale === 'CREDIT' || t.paymentStatus === 'unpaid';
+          }
+
+          return true;
+        });
         const sortedTransactions = companyTransactions.sort((a: any, b: any) =>
           new Date(b.date).getTime() - new Date(a.date).getTime()
         );
@@ -250,7 +274,7 @@ export default function SupplierDetailsPage() {
           {!isEditing && (
             <>
               <button
-                onClick={() => setShowLedgerModal(true)}
+                onClick={() => navigate(`/dashboard/suppliers/${id}/ledger`)}
                 className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition"
               >
                 View Ledger
@@ -283,8 +307,8 @@ export default function SupplierDetailsPage() {
         <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-red-500">
           <p className="text-gray-600 text-sm font-medium">Amount Payable</p>
           <p className={`text-2xl font-bold mt-2 ${(supplier.currentBalance || 0) > 0 ? 'text-red-600' :
-              (supplier.currentBalance || 0) < 0 ? 'text-green-600' :
-                'text-gray-600'
+            (supplier.currentBalance || 0) < 0 ? 'text-green-600' :
+              'text-gray-600'
             }`}>
             Rs. {(supplier.currentBalance || 0).toLocaleString()}
           </p>
@@ -559,8 +583,8 @@ export default function SupplierDetailsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-3 py-1 text-xs font-semibold rounded-full ${transaction.type === 'purchase' ? 'bg-purple-100 text-purple-800' :
-                          transaction.type === 'payment' ? 'bg-green-100 text-green-800' :
-                            'bg-gray-100 text-gray-800'
+                        transaction.type === 'payment' ? 'bg-green-100 text-green-800' :
+                          'bg-gray-100 text-gray-800'
                         }`}>
                         {transaction.type.toUpperCase()}
                       </span>
@@ -704,8 +728,8 @@ export default function SupplierDetailsPage() {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600 mb-1">Type</p>
                 <span className={`inline-block px-3 py-1 text-sm font-semibold rounded-full ${selectedTransaction.type === 'purchase' ? 'bg-purple-100 text-purple-800' :
-                    selectedTransaction.type === 'payment' ? 'bg-green-100 text-green-800' :
-                      'bg-red-100 text-red-800'
+                  selectedTransaction.type === 'payment' ? 'bg-green-100 text-green-800' :
+                    'bg-red-100 text-red-800'
                   }`}>
                   {selectedTransaction.type.toUpperCase()}
                 </span>
@@ -730,8 +754,8 @@ export default function SupplierDetailsPage() {
               <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-500">
                 <p className="text-sm text-gray-600 mb-2">Balance After Transaction</p>
                 <p className={`text-xl font-bold ${(selectedTransaction.balance || 0) > 0 ? 'text-red-600' :
-                    (selectedTransaction.balance || 0) < 0 ? 'text-green-600' :
-                      'text-gray-600'
+                  (selectedTransaction.balance || 0) < 0 ? 'text-green-600' :
+                    'text-gray-600'
                   }`}>
                   Rs. {(selectedTransaction.balance || 0).toLocaleString()}
                 </p>
@@ -812,132 +836,136 @@ export default function SupplierDetailsPage() {
       {showLedgerModal && supplier && (
         <div ref={ledgerModalRef} className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 z-10">
-              <div className="flex justify-between items-center">
+            {/* Header like reference image */}
+            <div className="bg-blue-50 border-2 border-blue-200 p-4 m-4 rounded-lg">
+              <div className="flex justify-between items-start">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Supplier Ledger - {supplier.name}</h2>
-                  <p className="text-sm text-gray-600 mt-1">Supplier Number: {supplier.partyNumber}</p>
+                  <h2 className="text-xl font-bold text-gray-900">{supplier.name}</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {supplier.partyNumber && `#${supplier.partyNumber}`} {supplier.city && `• ${supplier.city}`}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center gap-4 mb-2">
+                    <span className="text-sm text-gray-600">From:</span>
+                    <input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="px-2 py-1 border border-gray-300 rounded text-sm"
+                    />
+                    <span className="text-sm text-gray-600">To:</span>
+                    <input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="px-2 py-1 border border-gray-300 rounded text-sm"
+                    />
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm text-gray-600">Opening Balance:</span>
+                    <span className="text-lg font-bold text-gray-900 ml-2">
+                      {(supplier.openingBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
                 <button
                   onClick={() => setShowLedgerModal(false)}
-                  className="text-gray-500 hover:text-gray-700 text-3xl font-bold leading-none"
+                  className="text-gray-500 hover:text-gray-700 text-3xl font-bold leading-none ml-4"
                 >
                   ×
                 </button>
               </div>
             </div>
 
-            <div className="p-6">
-              {/* Ledger Table */}
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-gray-300">
+            <div className="px-4 pb-4">
+              {/* Ledger Table - Matching reference format */}
+              <div className="overflow-x-auto border border-blue-300 rounded">
+                <table className="min-w-full">
                   <thead>
-                    <tr className="bg-gray-100">
-                      <th className="border border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Date</th>
-                      <th className="border border-gray-300 px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Particulars</th>
-                      <th className="border border-gray-300 px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">Debit (Rs.)</th>
-                      <th className="border border-gray-300 px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">Credit (Rs.)</th>
-                      <th className="border border-gray-300 px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">Balance (Rs.)</th>
+                    <tr className="bg-blue-100">
+                      <th className="border-b border-blue-300 px-4 py-3 text-left text-sm font-bold text-blue-800">Date</th>
+                      <th className="border-b border-blue-300 px-4 py-3 text-left text-sm font-bold text-blue-800">Voucher No</th>
+                      <th className="border-b border-blue-300 px-4 py-3 text-left text-sm font-bold text-blue-800">Description</th>
+                      <th className="border-b border-blue-300 px-4 py-3 text-right text-sm font-bold text-blue-800">Debit</th>
+                      <th className="border-b border-blue-300 px-4 py-3 text-right text-sm font-bold text-blue-800">Credit</th>
+                      <th className="border-b border-blue-300 px-4 py-3 text-right text-sm font-bold text-blue-800">Balance</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(() => {
                       let runningBalance = supplier.openingBalance || 0;
-                      const ledgerEntries = [];
+                      const ledgerEntries: JSX.Element[] = [];
+                      const currentCompany = localStorage.getItem('selectedCompany') || 'QASIM SEWING MACHINE';
 
-                      // Opening Balance
-                      if (supplier.openingBalance !== 0) {
-                        ledgerEntries.push(
-                          <tr key="opening" className="bg-blue-50">
-                            <td className="border border-gray-300 px-4 py-2 text-sm">{supplier.createdDate}</td>
-                            <td className="border border-gray-300 px-4 py-2 text-sm font-semibold">Opening Balance</td>
-                            <td className="border border-gray-300 px-4 py-2 text-sm text-right">
-                              {supplier.openingBalance < 0 ? Math.abs(supplier.openingBalance).toLocaleString() : '-'}
-                            </td>
-                            <td className="border border-gray-300 px-4 py-2 text-sm text-right">
-                              {supplier.openingBalance > 0 ? supplier.openingBalance.toLocaleString() : '-'}
-                            </td>
-                            <td className="border border-gray-300 px-4 py-2 text-sm text-right font-bold">
-                              {runningBalance.toLocaleString()}
-                            </td>
-                          </tr>
-                        );
+                      // Filter and sort all transactions
+                      let allTransactions = (supplier.transactions || [])
+                        .filter((t: any) => t.companyName === currentCompany)
+                        .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+                      // Apply date filters
+                      if (fromDate) {
+                        allTransactions = allTransactions.filter((t: any) => new Date(t.date) >= new Date(fromDate));
                       }
-
-                      // Process all transactions
-                      const allTransactions = (supplier.transactions || []).sort((a: any, b: any) =>
-                        new Date(a.date).getTime() - new Date(b.date).getTime()
-                      );
+                      if (toDate) {
+                        allTransactions = allTransactions.filter((t: any) => new Date(t.date) <= new Date(toDate));
+                      }
 
                       allTransactions.forEach((txn: any, index: number) => {
                         let debit = 0;
                         let credit = 0;
+                        let description = '';
 
                         if (txn.type === 'purchase') {
-                          // For purchases: credit is the unpaid amount (increases payable)
-                          const unpaidAmount = txn.amount - (txn.paidAmount || 0);
-                          credit = unpaidAmount;
-                          runningBalance += unpaidAmount;
+                          // Purchase = Debit (increases what we owe)
+                          debit = txn.amount || 0;
+                          runningBalance += debit;
+
+                          // Build description with items
+                          if (txn.items && txn.items.length > 0) {
+                            const itemDescs = txn.items.slice(0, 2).map((item: any) =>
+                              `${item.description || item.articleCode}${item.quantity ? `, (${item.quantity})` : ''}`
+                            );
+                            description = itemDescs.join(', ');
+                            if (txn.items.length > 2) description += '...';
+                          } else {
+                            description = txn.description || 'Purchase';
+                          }
                         } else if (txn.type === 'payment') {
-                          // For payments: debit is the payment amount (decreases payable)
-                          debit = txn.amount;
-                          runningBalance -= txn.amount;
+                          // Payment = Credit (decreases what we owe)
+                          credit = txn.amount || 0;
+                          runningBalance -= credit;
+                          description = txn.description || 'Payment';
                         }
 
                         ledgerEntries.push(
                           <tr key={txn.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="border border-gray-300 px-4 py-2 text-sm">
-                              {new Date(txn.date).toLocaleDateString()}
+                            <td className="border-b border-gray-200 px-4 py-3 text-sm text-gray-900">
+                              {new Date(txn.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                             </td>
-                            <td className="border border-gray-300 px-4 py-2 text-sm">
-                              <div className="flex items-center gap-2">
-                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${txn.type === 'purchase' ? 'bg-purple-100 text-purple-800' :
-                                    'bg-green-100 text-green-800'
-                                  }`}>
-                                  {txn.type.toUpperCase()}
-                                </span>
-                                <span>{txn.description}</span>
-                              </div>
+                            <td className="border-b border-gray-200 px-4 py-3 text-sm text-gray-900">
+                              {txn.invoiceNo || txn.id?.slice(-8) || '-'}
                             </td>
-                            <td className="border border-gray-300 px-4 py-2 text-sm text-right font-semibold text-green-600">
-                              {debit > 0 ? debit.toLocaleString() : '-'}
+                            <td className="border-b border-gray-200 px-4 py-3 text-sm text-gray-700">
+                              {description}
                             </td>
-                            <td className="border border-gray-300 px-4 py-2 text-sm text-right font-semibold text-red-600">
-                              {credit > 0 ? credit.toLocaleString() : '-'}
+                            <td className="border-b border-gray-200 px-4 py-3 text-sm text-right text-gray-900">
+                              {debit > 0 ? debit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
                             </td>
-                            <td className="border border-gray-300 px-4 py-2 text-sm text-right font-bold">
-                              <span className={runningBalance > 0 ? 'text-red-600' : runningBalance < 0 ? 'text-green-600' : 'text-gray-600'}>
-                                {runningBalance.toLocaleString()}
-                              </span>
+                            <td className="border-b border-gray-200 px-4 py-3 text-sm text-right text-gray-900">
+                              {credit > 0 ? credit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                            </td>
+                            <td className="border-b border-gray-200 px-4 py-3 text-sm text-right font-semibold text-gray-900">
+                              {runningBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
                         );
                       });
 
-                      // Closing Balance
-                      ledgerEntries.push(
-                        <tr key="closing" className="bg-yellow-50 font-bold">
-                          <td className="border border-gray-300 px-4 py-3 text-sm" colSpan={2}>
-                            Closing Balance
-                          </td>
-                          <td className="border border-gray-300 px-4 py-3 text-sm text-right">
-                            {runningBalance < 0 ? Math.abs(runningBalance).toLocaleString() : '-'}
-                          </td>
-                          <td className="border border-gray-300 px-4 py-3 text-sm text-right">
-                            {runningBalance > 0 ? runningBalance.toLocaleString() : '-'}
-                          </td>
-                          <td className="border border-gray-300 px-4 py-3 text-sm text-right">
-                            <span className={runningBalance > 0 ? 'text-red-600' : runningBalance < 0 ? 'text-green-600' : 'text-gray-600'}>
-                              {runningBalance.toLocaleString()}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-
                       return ledgerEntries.length > 0 ? ledgerEntries : (
                         <tr>
-                          <td colSpan={5} className="border border-gray-300 px-4 py-8 text-center text-gray-500">
-                            No transactions found
+                          <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                            No transactions found for the selected period
                           </td>
                         </tr>
                       );
@@ -953,13 +981,13 @@ export default function SupplierDetailsPage() {
                   <p className="text-xl font-bold text-blue-600">Rs. {(supplier.openingBalance || 0).toLocaleString()}</p>
                 </div>
                 <div className={`p-4 rounded-lg border-l-4 ${(supplier.currentBalance || 0) > 0 ? 'bg-red-50 border-red-500' :
-                    (supplier.currentBalance || 0) < 0 ? 'bg-green-50 border-green-500' :
-                      'bg-gray-50 border-gray-500'
+                  (supplier.currentBalance || 0) < 0 ? 'bg-green-50 border-green-500' :
+                    'bg-gray-50 border-gray-500'
                   }`}>
                   <p className="text-sm text-gray-600 mb-1">Current Balance</p>
                   <p className={`text-xl font-bold ${(supplier.currentBalance || 0) > 0 ? 'text-red-600' :
-                      (supplier.currentBalance || 0) < 0 ? 'text-green-600' :
-                        'text-gray-600'
+                    (supplier.currentBalance || 0) < 0 ? 'text-green-600' :
+                      'text-gray-600'
                     }`}>
                     Rs. {(supplier.currentBalance || 0).toLocaleString()}
                   </p>

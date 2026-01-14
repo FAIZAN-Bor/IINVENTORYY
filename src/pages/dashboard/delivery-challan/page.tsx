@@ -20,6 +20,7 @@ interface InventoryItem {
     articleCode: string;
     description: string;
     unit: string;
+    currentStock?: number;
 }
 
 export default function DeliveryChallanPage() {
@@ -110,6 +111,18 @@ export default function DeliveryChallanPage() {
         if (!newItemName || !newQuantity) {
             alert('Item Name and Quantity are required');
             return;
+        }
+
+        // Validate Stock
+        const selectedInventoryItem = allInventory.find(i =>
+            i.name === newItemName || i.description === newItemName || i.articleCode === newItemName
+        );
+
+        if (selectedInventoryItem && selectedInventoryItem.currentStock !== undefined) {
+            if (Number(newQuantity) > selectedInventoryItem.currentStock) {
+                alert(`Cannot exceed available stock: ${selectedInventoryItem.currentStock}`);
+                return;
+            }
         }
 
         const newItem: ChallanItem = {
@@ -252,6 +265,9 @@ export default function DeliveryChallanPage() {
                         left: 0;
                         top: 0;
                         width: 100%;
+                        margin: 0;
+                        padding: 5mm;
+                        min-height: auto !important;
                         background: white;
                     }
                     .no-print {
@@ -280,7 +296,7 @@ export default function DeliveryChallanPage() {
                     }
                     
                     /* Table Styles */
-                    table { width: 100%; border-collapse: collapse; font-size: 12pt; margin-top: 5mm; }
+                    table { width: 100%; border-collapse: collapse; font-size: 11pt; margin-top: 5mm; }
                     th { border: 1px solid black; padding: 2px; background: #e0e0e0 !important; font-weight: bold; text-align: center; }
                     td { border: 1px solid black; padding: 2px; }
                     
@@ -292,7 +308,7 @@ export default function DeliveryChallanPage() {
                         margin: 0 !important;
                         width: 100%;
                         font-family: inherit;
-                        font-size: 12pt;
+                        font-size: 10pt;
                         font-weight: inherit;
                     }
                 }
@@ -338,8 +354,8 @@ export default function DeliveryChallanPage() {
                 </div>
 
                 {/* Header Title */}
-                <div className="flex justify-center mb-8 print:mb-2">
-                    <div className="border-2 border-black px-8 py-2">
+                <div className="flex justify-center mb-8 print:mb-2 print:mt-2">
+                    <div className="border-2 border-black px-8 py-2 w-full text-center max-w-lg mx-auto">
                         <h1 className="text-2xl font-bold font-serif uppercase tracking-wider">DELIVERY CHALLAN</h1>
                     </div>
                 </div>
@@ -438,8 +454,8 @@ export default function DeliveryChallanPage() {
                     </div>
 
                     {/* Row 3: Address & Courier */}
-                    <div className="flex justify-between gap-8">
-                        <div className="party-row flex-1">
+                    <div className="flex justify-between gap-4">
+                        <div className="party-row w-[55%]">
                             <span className="party-label">Address:</span>
                             <div className="party-value">
                                 <input
@@ -451,7 +467,7 @@ export default function DeliveryChallanPage() {
                                 />
                             </div>
                         </div>
-                        <div className="party-row w-1/3">
+                        <div className="party-row w-[40%]">
                             <span className="party-label">Courier's Name:</span>
                             <div className="party-value">
                                 <input
@@ -532,7 +548,10 @@ export default function DeliveryChallanPage() {
                                                         onClick={() => selectInventoryItem(item)}
                                                     >
                                                         <div className="font-bold">{item.name}</div>
-                                                        <div className="text-xs text-gray-500">{item.articleCode}</div>
+                                                        <div className="flex justify-between text-xs text-gray-500">
+                                                            <span>{item.articleCode}</span>
+                                                            <span className="font-bold text-blue-600">Stock: {item.currentStock ?? 'N/A'}</span>
+                                                        </div>
                                                     </div>
                                                 ))}
                                                 {filteredInventory.length === 0 && (
@@ -568,10 +587,10 @@ export default function DeliveryChallanPage() {
                                         </select>
                                         <button
                                             onClick={handleAddItem}
-                                            className="bg-blue-600 text-white w-8 h-8 rounded hover:bg-blue-700 shadow flex items-center justify-center flex-shrink-0"
+                                            className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 shadow flex items-center justify-center flex-shrink-0"
                                             title="Add Entry"
                                         >
-                                            <span className="font-bold text-lg leading-none pb-1">+</span>
+                                            <span className="font-bold text-sm">Add</span>
                                         </button>
                                     </div>
                                 </td>
@@ -716,6 +735,7 @@ export default function DeliveryChallanPage() {
                                     <tr>
                                         <th className="p-2 text-left border-b">Name</th>
                                         <th className="p-2 text-left border-b">Article Code</th>
+                                        <th className="p-2 text-left border-b">Stock</th>
                                         <th className="p-2 text-left border-b">Unit</th>
                                     </tr>
                                 </thead>
@@ -728,6 +748,7 @@ export default function DeliveryChallanPage() {
                                         >
                                             <td className="p-2 font-medium">{item.name}</td>
                                             <td className="p-2">{item.articleCode}</td>
+                                            <td className="p-2 font-bold text-blue-600">{item.currentStock ?? 'N/A'}</td>
                                             <td className="p-2">{item.unit || '-'}</td>
                                         </tr>
                                     ))}

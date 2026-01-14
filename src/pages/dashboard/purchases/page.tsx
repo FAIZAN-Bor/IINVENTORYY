@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { inventoryItems as initialItems } from '../../../data/mockData';
 import { InventoryItem, Invoice, InvoiceItem } from '../../../types';
 import { generateInvoicePDF } from '../../../utils/pdfGenerator';
 
 export default function PurchasesPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [supplierName, setSupplierName] = useState('');
   const [company, setCompany] = useState('QASIM SEWING MACHINE');
@@ -24,7 +29,6 @@ export default function PurchasesPage() {
     city: '',
   });
   const [paidAmount, setPaidAmount] = useState(0);
-  const [paymentStatus, setPaymentStatus] = useState<'full' | 'partial' | 'unpaid'>('full');
   const [quantity, setQuantity] = useState(1);
   const [purchaseRate, setPurchaseRate] = useState(0);
   const [currentInvoice, setCurrentInvoice] = useState<Invoice | null>(null);
@@ -77,14 +81,38 @@ export default function PurchasesPage() {
     };
   }, []);
 
-  // Auto-update paid amount when netTotal changes (default to full payment)
+  // Auto-update paid amount based on payment terms
   useEffect(() => {
-    if (invoiceItems.length > 0 && paymentStatus === 'full') {
+    if (invoiceItems.length > 0) {
       const total = invoiceItems.reduce((sum, item) => sum + item.totalAmount, 0);
       const netAmount = total - discount;
-      setPaidAmount(Math.round(netAmount));
+
+      if (termOfSale === 'CASH') {
+        // Full Payment
+        setPaidAmount(Math.round(netAmount));
+      } else {
+        // Credit = No Payment
+        setPaidAmount(0);
+      }
     }
-  }, [invoiceItems, discount]);
+  }, [invoiceItems, discount, termOfSale]);
+
+  // Load purchase data for editing
+  useEffect(() => {
+    const state = location.state as { editPurchase?: any };
+    if (state?.editPurchase) {
+      const purchase = state.editPurchase;
+      setEditingId(purchase.id);
+      setSupplierName(purchase.customerName || '');
+      setTermOfSale(purchase.termOfSale || 'CASH');
+      setDiscount(purchase.discount || 0);
+
+      // Load invoice items
+      if (purchase.invoiceItems && purchase.invoiceItems.length > 0) {
+        setInvoiceItems(purchase.invoiceItems);
+      }
+    }
+  }, [location]);
 
   const loadAvailableSuppliers = () => {
     const savedParties = localStorage.getItem('parties');
@@ -348,9 +376,9 @@ export default function PurchasesPage() {
       return;
     }
 
-    // For partial or unpaid purchases, supplier name is mandatory
-    if (paymentStatus !== 'full' && !supplierName) {
-      alert('Supplier name is required for partial or unpaid purchases. Please select or add a supplier.');
+    // For CREDIT purchases, supplier name is mandatory
+    if (termOfSale === 'CREDIT' && !supplierName) {
+      alert('Supplier name is required for CREDIT purchases. Please select or add a supplier.');
       return;
     }
 
@@ -365,18 +393,8 @@ export default function PurchasesPage() {
 
     const invoiceNo = `PI-${new Date().getMonth() + 1}${new Date().getDate()}-${Date.now().toString().slice(-4)}`;
 
-    // Determine actual payment status with proper comparison (accounting for floating point)
-    let actualPaymentStatus: 'full' | 'partial' | 'unpaid';
-    const roundedPaid = Math.round(paidAmount * 100) / 100;
-    const roundedTotal = Math.round(netTotal * 100) / 100;
-
-    if (roundedPaid === 0) {
-      actualPaymentStatus = 'unpaid';
-    } else if (roundedPaid >= roundedTotal) {
-      actualPaymentStatus = 'full';
-    } else {
-      actualPaymentStatus = 'partial';
-    }
+    // Determine payment status based on termOfSale
+    const actualPaymentStatus: 'full' | 'unpaid' = termOfSale === 'CASH' ? 'full' : 'unpaid';
 
     const remainingAmount = Math.max(0, netTotal - paidAmount);
 
@@ -417,11 +435,18 @@ export default function PurchasesPage() {
 
     // Save transaction with payment details
     const savedTransactions = localStorage.getItem('transactions');
-    const transactions = savedTransactions ? JSON.parse(savedTransactions) : [];
-    transactions.push({
-      id: Date.now().toString(),
+    let transactions = savedTransactions ? JSON.parse(savedTransactions) : [];
+
+    // Get the old transaction data BEFORE updating (for editing sync)
+    let oldTransaction: any = null;
+    if (editingId) {
+      oldTransaction = transactions.find((t: any) => t.id === editingId);
+    }
+
+    const transactionData = {
+      id: editingId || Date.now().toString(),
       type: 'purchase',
-      invoiceNo,
+      invoiceNo: editingId ? (oldTransaction?.invoiceNo || invoiceNo) : invoiceNo,
       customerName: supplierName,
       companyName: company,
       amount: netTotal,
@@ -430,29 +455,67 @@ export default function PurchasesPage() {
       paymentStatus: actualPaymentStatus,
       date: new Date().toISOString().split('T')[0],
       items: invoiceItems.length,
+      discount: discount,
       termOfSale: termOfSale,
       invoiceItems: invoiceItems,
-    });
+    };
+
+    if (editingId) {
+      // Update existing transaction
+      transactions = transactions.map((t: any) => t.id === editingId ? transactionData : t);
+    } else {
+      // Add new transaction
+      transactions.push(transactionData);
+    }
+
     localStorage.setItem('transactions', JSON.stringify(transactions));
 
-    // Update supplier ledger with purchase transaction (only if supplier name is provided)
-    if (supplierName && supplierName.trim()) {
-      const savedParties = localStorage.getItem('parties');
-      const parties = savedParties ? JSON.parse(savedParties) : [];
+    // Update supplier ledger with purchase transaction
+    const savedParties = localStorage.getItem('parties');
+    const parties = savedParties ? JSON.parse(savedParties) : [];
 
+    // If editing and supplier changed or term changed to CASH, remove old transaction from old supplier
+    if (editingId && oldTransaction && oldTransaction.customerName) {
+      const oldSupplier = parties.find((p: any) =>
+        p.name.toLowerCase() === oldTransaction.customerName.toLowerCase() && p.type === 'supplier'
+      );
+
+      if (oldSupplier && oldSupplier.transactions) {
+        // Find and remove the old transaction from supplier ledger
+        const oldTxIndex = oldSupplier.transactions.findIndex((t: any) =>
+          t.invoiceNo === oldTransaction.invoiceNo
+        );
+
+        if (oldTxIndex !== -1) {
+          const removedTx = oldSupplier.transactions[oldTxIndex];
+          // Reverse the balance changes
+          oldSupplier.currentBalance = (oldSupplier.currentBalance || 0) - (removedTx.remainingAmount || 0);
+          oldSupplier.totalPurchases = (oldSupplier.totalPurchases || 0) - (removedTx.amount || 0);
+          oldSupplier.totalPayments = (oldSupplier.totalPayments || 0) - (removedTx.paidAmount || 0);
+          oldSupplier.transactions.splice(oldTxIndex, 1);
+
+          const supplierIndex = parties.findIndex((p: any) => p.id === oldSupplier.id);
+          parties[supplierIndex] = oldSupplier;
+        }
+      }
+    }
+
+    // Only add to supplier ledger if CREDIT purchase and supplier name is provided
+    if (termOfSale === 'CREDIT' && supplierName && supplierName.trim()) {
       let supplier = parties.find((p: any) => p.name.toLowerCase() === supplierName.toLowerCase() && p.type === 'supplier');
 
       const purchaseTransaction = {
-        id: Date.now().toString(),
+        id: editingId || Date.now().toString(),
         date: new Date().toISOString().split('T')[0],
         type: 'purchase',
         companyName: company,
         description: `Purchase Invoice - ${invoiceItems.length} items`,
-        invoiceNo: invoiceNo,
+        invoiceNo: editingId ? transactionData.invoiceNo : invoiceNo,
         amount: netTotal,
         paidAmount: paidAmount,
         remainingAmount: remainingAmount,
         paymentStatus: actualPaymentStatus,
+        termOfSale: termOfSale,
         balance: 0,
         items: invoiceItems.map(item => ({
           articleCode: item.articleCode,
@@ -513,28 +576,31 @@ export default function PurchasesPage() {
         };
         parties.push(supplier);
       }
-
-      localStorage.setItem('parties', JSON.stringify(parties));
-      window.dispatchEvent(new Event('supplierDataChanged'));
     }
+
+    localStorage.setItem('parties', JSON.stringify(parties));
+    window.dispatchEvent(new Event('supplierDataChanged'));
 
     // Reload purchase history
 
 
-    // Clear form
+    // Clear form and reset editing
     setSupplierName('');
     setInvoiceItems([]);
     setDiscount(0);
     setPaidAmount(0);
-    setPaymentStatus('full');
+    setEditingId(null);
 
-    const statusMessage = actualPaymentStatus === 'full'
-      ? 'Purchase completed and fully paid!'
-      : actualPaymentStatus === 'unpaid'
-        ? `Purchase recorded. Full amount of ₨${netTotal.toFixed(2)} is pending.`
-        : `Purchase recorded. Paid ₨${paidAmount.toFixed(2)}, Remaining ₨${remainingAmount.toFixed(2)} is pending.`;
+    const statusMessage = editingId
+      ? 'Purchase updated successfully!'
+      : actualPaymentStatus === 'full'
+        ? 'Purchase completed and fully paid!'
+        : `Purchase recorded. Full amount of ₨${netTotal.toFixed(2)} is pending.`;
 
     alert(statusMessage);
+
+    // Navigate to history after save
+    navigate('/dashboard/purchase-history');
   };
 
   const total = invoiceItems.reduce((sum, item) => sum + item.totalAmount, 0);
@@ -544,11 +610,15 @@ export default function PurchasesPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Create Purchase Invoice</h1>
-          <p className="text-gray-600 mt-1">Record inventory purchases and update stock</p>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {editingId ? 'Edit Purchase Invoice' : 'Create Purchase Invoice'}
+          </h1>
+          <p className="text-gray-600 mt-1">
+            {editingId ? 'Update existing purchase record' : 'Record inventory purchases and update stock'}
+          </p>
         </div>
         <button
-          onClick={() => window.location.href = '/dashboard/purchase-history'}
+          onClick={() => navigate('/dashboard/purchase-history')}
           className="bg-white hover:bg-blue-50 text-blue-600 border-2 border-blue-300 px-6 py-3 rounded-lg font-semibold transition-all shadow-lg"
         >
           📋 Purchase History
@@ -561,8 +631,8 @@ export default function PurchasesPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Supplier Name {paymentStatus !== 'full' && <span className="text-red-600">*</span>}
-              {paymentStatus === 'full' && <span className="text-xs text-gray-500 ml-2">(Optional for full payment)</span>}
+              Supplier Name {termOfSale === 'CREDIT' && <span className="text-red-600">*</span>}
+              {termOfSale === 'CASH' && <span className="text-xs text-gray-500 ml-2">(Optional for CASH payment)</span>}
             </label>
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -578,7 +648,7 @@ export default function PurchasesPage() {
                     }}
                     onFocus={() => setShowSupplierDropdown(true)}
                     className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    placeholder={paymentStatus === 'full' ? "Optional - Select or enter supplier" : "Required - Select or add supplier"}
+                    placeholder={termOfSale === 'CASH' ? "Optional - Select or enter supplier" : "Required - Select or add supplier"}
                   />
 
                   {/* Available Suppliers Dropdown */}
@@ -818,86 +888,28 @@ export default function PurchasesPage() {
           <div className="mt-6 pt-6 border-t-2 border-gray-200">
             <h3 className="text-lg font-bold text-gray-900 mb-4">Payment Details</h3>
 
-            {/* Quick Payment Options */}
+            {/* Payment Display */}
             <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Payment Type</label>
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setPaidAmount(Math.round(netTotal));
-                    setPaymentStatus('full');
-                  }}
-                  className={`px-4 py-3 rounded-lg font-semibold transition-all ${paymentStatus === 'full'
-                    ? 'bg-green-600 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-700 hover:bg-green-50 border-2 border-gray-300'
-                    }`}
-                >
-                  Full Payment
-                  <div className="text-xs mt-1">₨{Math.round(netTotal).toLocaleString()}</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setPaidAmount(0);
-                    setPaymentStatus('unpaid');
-                  }}
-                  className={`px-4 py-3 rounded-lg font-semibold transition-all ${paymentStatus === 'unpaid'
-                    ? 'bg-red-600 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-700 hover:bg-red-50 border-2 border-gray-300'
-                    }`}
-                >
-                  No Payment
-                  <div className="text-xs mt-1">Full Credit</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setPaymentStatus('partial');
-                    setPaidAmount(0);
-                  }}
-                  className={`px-4 py-3 rounded-lg font-semibold transition-all ${paymentStatus === 'partial'
-                    ? 'bg-orange-600 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-700 hover:bg-orange-50 border-2 border-gray-300'
-                    }`}
-                >
-                  Partial Payment
-                  <div className="text-xs mt-1">Custom Amount</div>
-                </button>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-semibold text-gray-700">Payment Terms:</span>
+                <span className={`px-3 py-1 rounded-full text-sm font-bold ${termOfSale === 'CASH' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  {termOfSale === 'CASH' ? 'CASH (Full Payment)' : 'CREDIT (No Payment)'}
+                </span>
               </div>
             </div>
 
-            {/* Manual Payment Input */}
+            {/* Payment Summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Amount Paid (₨)</label>
-                <input
-                  type="number"
-                  value={paidAmount}
-                  onChange={(e) => {
-                    const amount = parseInt(e.target.value) || 0;
-                    setPaidAmount(amount);
-                    if (amount === 0) setPaymentStatus('unpaid');
-                    else if (amount >= Math.round(netTotal)) setPaymentStatus('full');
-                    else setPaymentStatus('partial');
-                  }}
-                  max={Math.round(netTotal)}
-                  min="0"
-                  step="1"
-                  className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  placeholder="Enter amount paid"
-                />
+                <div className="px-4 py-2 bg-gray-100 rounded-lg border-2 border-gray-300 flex items-center h-[42px]">
+                  <span className="font-bold text-lg text-green-600">₨{paidAmount.toLocaleString()}</span>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Remaining Amount</label>
                 <div className="px-4 py-2 bg-gray-100 rounded-lg border-2 border-gray-300 flex items-center h-[42px]">
-                  <span className="font-bold text-lg text-gray-900">₨{(Math.round(netTotal) - paidAmount).toLocaleString()}</span>
+                  <span className="font-bold text-lg text-red-600">₨{(Math.round(netTotal) - paidAmount).toLocaleString()}</span>
                 </div>
               </div>
             </div>
