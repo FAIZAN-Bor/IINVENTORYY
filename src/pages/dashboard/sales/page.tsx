@@ -35,6 +35,7 @@ export default function SalesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [discount, setDiscount] = useState(0);
   const [taxPercentage, setTaxPercentage] = useState(0);
+  const [tcsCharges, setTcsCharges] = useState(0);
   const [netAmount, setNetAmount] = useState(0);
   const [balance, setBalance] = useState(0);
   const [balanceNetAmount, setBalanceNetAmount] = useState(0);
@@ -54,7 +55,6 @@ export default function SalesPage() {
   const [challanNumber, setChallanNumber] = useState('');
 
   // Editable invoice fields
-  const [editableCompany, setEditableCompany] = useState('QASIM SEWING MACHINE');
   const [editableCustomerName, setEditableCustomerName] = useState('');
   const [editableInvoiceNo, setEditableInvoiceNo] = useState('');
   const [editableItems, setEditableItems] = useState<InvoiceItem[]>([]);
@@ -79,14 +79,12 @@ export default function SalesPage() {
     const savedCompany = localStorage.getItem('selectedCompany');
     if (savedCompany) {
       setCompany(savedCompany);
-      setEditableCompany(savedCompany);
     }
 
     // Listen for company changes
     const handleCompanyChange = () => {
       const newCompany = localStorage.getItem('selectedCompany') || 'QASIM SEWING MACHINE';
       setCompany(newCompany);
-      setEditableCompany(newCompany);
     };
     window.addEventListener('companyChanged', handleCompanyChange);
 
@@ -131,8 +129,8 @@ export default function SalesPage() {
   useEffect(() => {
     // Calculate net amount from invoice items
     const total = invoiceItems.reduce((sum, item) => sum + item.totalAmount, 0);
-    setNetAmount(total - discount);
-  }, [invoiceItems, discount]);
+    setNetAmount(total - discount + tcsCharges);
+  }, [invoiceItems, discount, tcsCharges]);
 
   // Party search functionality
   const handlePartySearch = (term: string) => {
@@ -262,6 +260,7 @@ export default function SalesPage() {
     setSearchTerm(`${item.articleCode} - ${item.name}`);
     setItemRate(item.rate);
     setItemUnit(item.unit);
+    setFromLocation(item.location || '');
     // lastPrice is handled by useEffect
     setRelatedItems([]);
   };
@@ -369,10 +368,14 @@ export default function SalesPage() {
     const generatedInvoiceNo = invoiceNumber || `SI-${month}${year}-${random}`;
 
     // Set editable fields
-    setEditableCompany(company);
     setEditableCustomerName(invoiceCustomerName);
     setEditableInvoiceNo(generatedInvoiceNo);
     setEditableItems([...invoiceItems]);
+
+    // Set default term of sale for walk-in customers
+    if (customerType === 'non-party') {
+      setInvoiceType('Cash');
+    }
 
     // Show editable preview instead of final preview
     setShowEditablePreview(true);
@@ -439,7 +442,10 @@ export default function SalesPage() {
   };
 
   const finalizeInvoice = () => {
-    const { total, netTotal } = calculateTotals();
+    // Calculate totals from editableItems (to ensure preview edits are reflected)
+    const total = editableItems.reduce((sum, item) => sum + item.totalAmount, 0);
+    const finalNetTotal = total - discount + tcsCharges;
+
 
     // Calculate payment details based on customer type and payment option
     let cashReceived = 0;
@@ -449,30 +455,21 @@ export default function SalesPage() {
     let dueDate: string | undefined;
 
     if (customerType === 'party') {
-      paymentOpt = paymentOption;
-      dueDaysValue = dueDays;
-
-      if (paymentOption === 'cash') {
-        cashReceived = netAmount;
+      // Simplifed Party Logic: Based purely on Invoice Type (Cash vs Credit)
+      if (invoiceType === 'Cash') {
+        // Full Payment
+        paymentOpt = 'cash';
+        cashReceived = finalNetTotal;
         remainingBalance = 0;
-      } else if (paymentOption === 'partial') {
-        cashReceived = partialPayment;
-        remainingBalance = netAmount - partialPayment;
-        // Calculate due date
-        const today = new Date();
-        today.setDate(today.getDate() + dueDays);
-        dueDate = today.toISOString().split('T')[0];
-      } else if (paymentOption === 'later') {
+      } else {
+        // Credit - No Payment
+        paymentOpt = 'later';
         cashReceived = 0;
-        remainingBalance = netAmount;
-        // Calculate due date
-        const today = new Date();
-        today.setDate(today.getDate() + dueDays);
-        dueDate = today.toISOString().split('T')[0];
+        remainingBalance = finalNetTotal;
       }
     } else {
       // Walk-in customer - always full payment
-      cashReceived = netAmount;
+      cashReceived = finalNetTotal;
       remainingBalance = 0;
     }
 
@@ -487,15 +484,15 @@ export default function SalesPage() {
       invoiceDate: new Date().toLocaleString(),
       items: editableItems,
       total,
-      tcsCharges: 0,
+      tcsCharges,
       discount,
-      netTotal: netAmount,
+      netTotal: finalNetTotal,
       cashReceived,
       remainingBalance,
       paymentOption: paymentOpt,
       dueDays: dueDaysValue,
       dueDate,
-      preparedBy: 'FAIZAN',
+      preparedBy: '',
     };
 
     setCurrentInvoice(invoice);
@@ -530,7 +527,7 @@ export default function SalesPage() {
       invoiceNo: editableInvoiceNo,
       customerName: editableCustomerName,
       companyName: company,
-      amount: netTotal,
+      amount: finalNetTotal,
       date: new Date().toISOString().split('T')[0],
       items: editableItems.length,
     };
@@ -544,34 +541,25 @@ export default function SalesPage() {
 
       const updatedParties = allParties.map((party: Party) => {
         if (party.partyNumber === selectedParty.partyNumber) {
-          // Calculate balance change based on payment option
+          // Calculate balance change based on Invoice Type
           let balanceChange = 0;
 
-          if (paymentOption === 'cash') {
-            // Full payment: reduce balance if there was previous due
-            if (partialPayment > 0 && partialPayment < netAmount) {
-              balanceChange = netAmount - partialPayment;
-            }
-            // else: full payment means no balance change
-          } else if (paymentOption === 'later') {
-            // Pay later: add full amount to balance
-            balanceChange = netAmount;
+          if (invoiceType === 'Credit') {
+            // Credit Sale: Increase balance by full amount
+            balanceChange = finalNetTotal;
+          } else {
+            // Cash Sale: No balance change (Full Payment)
+            balanceChange = 0;
           }
 
           const newBalance = (party.currentBalance || 0) + balanceChange;
 
-          // Add transaction to party history only for partial payment or pay later
+          // Add transaction to party history
           const partyTransactions = party.transactions || [];
 
-          // Only add transaction if NOT full payment
-          if (paymentOption !== 'cash') {
-            // Create descriptive message based on payment option
-            let transactionDescription = `Invoice ${editableInvoiceNo}`;
-            if (paymentOption === 'later') {
-              transactionDescription += ' - Pay Later';
-            } else if (paymentOption === 'partial') {
-              transactionDescription += ' - Partial Payment';
-            }
+          // Only add transaction if it's a CREDIT sale
+          if (invoiceType === 'Credit') {
+            const transactionDescription = `Invoice ${editableInvoiceNo} - Credit Sale`;
 
             partyTransactions.push({
               id: newTransaction.id,
@@ -579,11 +567,11 @@ export default function SalesPage() {
               type: 'sale',
               companyName: company,
               description: transactionDescription,
-              amount: netAmount,
-              paymentReceived: paymentOption === 'partial' ? partialPayment : 0,
+              amount: finalNetTotal,
+              paymentReceived: 0,
               balance: newBalance,
-              dueDays: dueDays,
-              dueDate: dueDate,
+              dueDays: 0, // No due days logic for basic credit now
+              dueDate: undefined,
             });
           }
 
@@ -660,7 +648,7 @@ export default function SalesPage() {
         <>
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 rounded-lg shadow-lg">
-            <h1 className="text-2xl font-bold">Sales Invoice - ERP System</h1>
+            <h1 className="text-2xl font-bold">Sale Bill - ERP System</h1>
             <p className="text-blue-100 text-sm mt-1">Professional Invoice Management System</p>
           </div>
 
@@ -814,64 +802,9 @@ export default function SalesPage() {
                           </div>
                         </div>
 
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">Payment Option:</label>
-                          <select
-                            value={paymentOption}
-                            onChange={(e) => setPaymentOption(e.target.value as any)}
-                            className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500"
-                          >
-                            <option value="cash">Full Payment Now</option>
-                            <option value="partial">Partial Payment</option>
-                            <option value="later">Pay Later</option>
-                          </select>
-                        </div>
+                        {/* Payment Options Removed for Party - handled by Inv Type now */}
 
-                        {paymentOption === 'partial' && (
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-700 mb-1">Paying Amount (Rs.):</label>
-                            <input
-                              type="number"
-                              value={partialPayment}
-                              onChange={(e) => setPartialPayment(parseInt(e.target.value) || 0)}
-                              placeholder="Enter amount"
-                              className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500"
-                              step="1"
-                            />
-                          </div>
-                        )}
 
-                        {(paymentOption === 'later' || paymentOption === 'partial') && (
-                          <>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-700 mb-1">Due Days:</label>
-                              <input
-                                type="number"
-                                value={dueDays}
-                                onChange={(e) => {
-                                  const value = parseInt(e.target.value) || 0;
-                                  setDueDays(value < 0 ? 0 : value);
-                                }}
-                                placeholder="Days until payment due"
-                                min="0"
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-700 mb-1">Due Date:</label>
-                              <input
-                                type="text"
-                                value={(() => {
-                                  const today = new Date();
-                                  today.setDate(today.getDate() + dueDays);
-                                  return today.toLocaleDateString('en-GB');
-                                })()}
-                                readOnly
-                                className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm bg-yellow-50 font-semibold text-gray-700"
-                              />
-                            </div>
-                          </>
-                        )}
                       </>
                     )}
 
@@ -938,6 +871,29 @@ export default function SalesPage() {
 
               {/* Right Column */}
               <div className="col-span-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Discount:</label>
+                    <input
+                      type="number"
+                      value={discount}
+                      onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">TCS Charges:</label>
+                    <input
+                      type="number"
+                      value={tcsCharges}
+                      onChange={(e) => setTcsCharges(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Net Amount:</label>
                   <input
@@ -1001,15 +957,13 @@ export default function SalesPage() {
                 <div className="grid grid-cols-12 gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div className="col-span-3">
                     <label className="block text-xs font-semibold text-gray-700 mb-1">From Location:</label>
-                    <select
+                    <input
+                      type="text"
                       value={fromLocation}
                       onChange={(e) => setFromLocation(e.target.value)}
                       className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm bg-white"
-                    >
-                      <option>HEAD OFFICE PARTS</option>
-                      <option>WAREHOUSE A</option>
-                      <option>WAREHOUSE B</option>
-                    </select>
+                      placeholder="Enter Location"
+                    />
                   </div>
 
                   <div className="col-span-5">
@@ -1266,10 +1220,9 @@ export default function SalesPage() {
               <label className="block text-sm font-semibold text-gray-700 mb-2">Company Name:</label>
               <input
                 type="text"
-                value={editableCompany}
-                onChange={(e) => setEditableCompany(e.target.value)}
-                className="w-full px-4 py-2 border border-blue-300 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter Company Name"
+                value={company}
+                readOnly
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold bg-gray-100 text-gray-700 cursor-not-allowed"
               />
             </div>
 
@@ -1300,8 +1253,8 @@ export default function SalesPage() {
                 onChange={(e) => setInvoiceType(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               >
-                <option>Credit</option>
-                <option>Cash</option>
+                <option value="Credit">Credit</option>
+                <option value="Cash">Cash</option>
               </select>
             </div>
           </div>
@@ -1396,9 +1349,13 @@ export default function SalesPage() {
                 <span className="font-semibold">Discount:</span>
                 <span className="font-bold">₨{discount.toFixed(2)}</span>
               </div>
+              <div className="flex justify-between mb-2">
+                <span className="font-semibold">TCS Charges:</span>
+                <span className="font-bold">₨{tcsCharges.toFixed(2)}</span>
+              </div>
               <div className="flex justify-between border-t-2 pt-2">
                 <span className="font-bold text-lg">Net Total:</span>
-                <span className="font-bold text-lg text-green-600">₨{(editableItems.reduce((sum, item) => sum + item.totalAmount, 0) - discount).toFixed(2)}</span>
+                <span className="font-bold text-lg text-green-600">₨{(editableItems.reduce((sum, item) => sum + item.totalAmount, 0) - discount + tcsCharges).toFixed(2)}</span>
               </div>
             </div>
           </div>

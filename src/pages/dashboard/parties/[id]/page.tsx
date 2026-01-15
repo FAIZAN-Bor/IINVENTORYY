@@ -35,6 +35,11 @@ export default function PartyDetailsPage() {
     bankName: '',
     description: '',
   });
+  const [companyStats, setCompanyStats] = useState({
+    balance: 0,
+    totalPurchases: 0,
+    totalPayments: 0
+  });
 
   const paymentModalRef = useRef<HTMLDivElement>(null);
   const transactionModalRef = useRef<HTMLDivElement>(null);
@@ -111,12 +116,49 @@ export default function PartyDetailsPage() {
         const companyTransactions = foundParty.transactions.filter((t: any) =>
           t.companyName === currentCompany
         );
-        const sortedTransactions = companyTransactions.sort((a: any, b: any) =>
+        // Calculate company specific stats
+        let balance = 0;
+        let purchases = 0;
+        let payments = 0;
+
+        // Sort by date ascending to calculate running balance correctly
+        const ascTransactions = [...companyTransactions].sort((a: any, b: any) =>
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+
+        // Re-calculate running balance for this company
+        const transactionsWithBalance = ascTransactions.map(t => {
+          if (t.type === 'sale') {
+            purchases += t.amount || 0;
+            // Payment received during sale is considered a payment
+            payments += t.paymentReceived || 0;
+            balance += (t.amount || 0) - (t.paymentReceived || 0);
+          } else if (t.type === 'payment') {
+            payments += t.amount || 0;
+            balance -= t.amount || 0;
+          } else if (t.type === 'return') {
+            // Handle returns if any (reduce balance / purchases)
+            // Assuming return reduces balance
+            balance -= t.amount || 0;
+          }
+          return { ...t, balance };
+        });
+
+        // Update stats
+        setCompanyStats({
+          balance: balance,
+          totalPurchases: purchases,
+          totalPayments: payments
+        });
+
+        // Sort back to desired order for display
+        const sortedTransactions = transactionsWithBalance.sort((a: any, b: any) =>
           new Date(b.date).getTime() - new Date(a.date).getTime()
         );
         setTransactions(sortedTransactions);
       } else {
         setTransactions([]);
+        setCompanyStats({ balance: 0, totalPurchases: 0, totalPayments: 0 });
       }
     }
   };
@@ -171,7 +213,8 @@ export default function PartyDetailsPage() {
     if (!party || paymentData.amount === 0) return;
 
     const currentCompany = localStorage.getItem('selectedCompany') || 'QASIM SEWING MACHINE';
-    const newBalance = party.currentBalance - paymentData.amount;
+    // Use company specific balance for calculation
+    const newBalance = companyStats.balance - paymentData.amount;
 
     // Create new transaction for party's transaction history
     const newTransaction: any = {
@@ -196,7 +239,10 @@ export default function PartyDetailsPage() {
 
           return {
             ...p,
-            currentBalance: newBalance,
+            // Only update global balance if needed, but for now we rely on re-calculation
+            // However, to keep global somewhat consistent we might update it roughly or ignore
+            // currentBalance is global, so we update it just to keep data structure valid
+            currentBalance: p.currentBalance - paymentData.amount,
             totalPayments: p.totalPayments + paymentData.amount,
             lastTransactionDate: new Date().toISOString().split('T')[0],
             transactions: partyTransactions,
@@ -302,28 +348,28 @@ export default function PartyDetailsPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-orange-500">
           <p className="text-gray-600 text-sm font-medium">Payments Due</p>
-          <p className={`text-2xl font-bold mt-2 ${party.currentBalance > 0 ? 'text-red-600' :
-            party.currentBalance < 0 ? 'text-green-600' :
+          <p className={`text-2xl font-bold mt-2 ${companyStats.balance > 0 ? 'text-red-600' :
+            companyStats.balance < 0 ? 'text-green-600' :
               'text-gray-600'
             }`}>
-            Rs. {party.currentBalance.toLocaleString()}
+            Rs. {companyStats.balance.toLocaleString()}
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            {party.currentBalance > 0 ? 'Amount to receive' : party.currentBalance < 0 ? 'Amount to pay' : 'No dues'}
+            {companyStats.balance > 0 ? 'Amount to receive' : companyStats.balance < 0 ? 'Amount to pay' : 'No dues'}
           </p>
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-500">
           <p className="text-gray-600 text-sm font-medium">Total Purchases</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
-            Rs. {party.totalPurchases.toLocaleString()}
+            Rs. {companyStats.totalPurchases.toLocaleString()}
           </p>
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-green-500">
           <p className="text-gray-600 text-sm font-medium">Total Payments Received</p>
           <p className="text-2xl font-bold text-gray-900 mt-2">
-            Rs. {party.totalPayments.toLocaleString()}
+            Rs. {companyStats.totalPayments.toLocaleString()}
           </p>
         </div>
       </div>
@@ -753,15 +799,15 @@ export default function PartyDetailsPage() {
 
               <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-500">
                 <p className="text-sm text-gray-600 mb-1">Balance After Transaction</p>
-                <p className={`text-xl font-bold ${selectedTransaction.balance > 0 ? 'text-red-600' :
-                  selectedTransaction.balance < 0 ? 'text-green-600' :
+                <p className={`text-xl font-bold ${(selectedTransaction.balance || 0) > 0 ? 'text-red-600' :
+                  (selectedTransaction.balance || 0) < 0 ? 'text-green-600' :
                     'text-gray-600'
                   }`}>
-                  Rs. {selectedTransaction.balance.toLocaleString()}
+                  Rs. {(selectedTransaction.balance || 0).toLocaleString()}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {selectedTransaction.balance > 0 ? 'Amount due from party' :
-                    selectedTransaction.balance < 0 ? 'Advance paid by party' :
+                  {(selectedTransaction.balance || 0) > 0 ? 'Amount due from party' :
+                    (selectedTransaction.balance || 0) < 0 ? 'Advance paid by party' :
                       'No outstanding balance'}
                 </p>
               </div>
@@ -770,13 +816,13 @@ export default function PartyDetailsPage() {
                 <div className="bg-yellow-50 p-4 rounded-lg">
                   <p className="text-sm text-gray-600 mb-2">Payment Status</p>
                   <p className="font-semibold text-gray-900">
-                    {selectedTransaction.paymentReceived === 0 ? '❌ Not Paid (Pay Later)' :
-                      selectedTransaction.paymentReceived < selectedTransaction.amount ? '⚠️ Partially Paid' :
+                    {(selectedTransaction.paymentReceived || 0) === 0 ? '❌ Not Paid (Pay Later)' :
+                      (selectedTransaction.paymentReceived || 0) < selectedTransaction.amount ? '⚠️ Partially Paid' :
                         '✅ Fully Paid'}
                   </p>
-                  {selectedTransaction.paymentReceived > 0 && selectedTransaction.paymentReceived < selectedTransaction.amount && (
+                  {(selectedTransaction.paymentReceived || 0) > 0 && (selectedTransaction.paymentReceived || 0) < selectedTransaction.amount && (
                     <p className="text-sm text-orange-600 mt-1">
-                      Remaining: Rs. {(selectedTransaction.amount - selectedTransaction.paymentReceived).toLocaleString()}
+                      Remaining: Rs. {(selectedTransaction.amount - (selectedTransaction.paymentReceived || 0)).toLocaleString()}
                     </p>
                   )}
                 </div>

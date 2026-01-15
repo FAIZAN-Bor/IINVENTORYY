@@ -287,7 +287,7 @@ export default function SupplierLedgerPage() {
                             {entries.length === 0 ? (
                                 <tr><td colSpan={6} className="text-center py-4">No transactions found</td></tr>
                             ) : (
-                                entries.map((entry, index) => (
+                                entries.map((entry) => (
                                     <tr key={entry.txn.id}>
                                         <td className="border border-black px-2 py-1 text-center">
                                             {new Date(entry.txn.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
