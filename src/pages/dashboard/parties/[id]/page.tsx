@@ -316,7 +316,7 @@ export default function PartyDetailsPage() {
           {!isEditing && (
             <>
               <button
-                onClick={() => setShowLedgerModal(true)}
+                onClick={() => navigate(`/dashboard/parties/${id}/ledger`)}
                 className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition"
               >
                 📒 Ledger

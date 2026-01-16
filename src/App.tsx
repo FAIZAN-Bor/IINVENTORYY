@@ -25,6 +25,7 @@ const DeliveryChallanHistory = lazy(() => import('./pages/dashboard/delivery-cha
 const Parties = lazy(() => import('./pages/dashboard/parties/page'));
 const PartyNew = lazy(() => import('./pages/dashboard/parties/new/page'));
 const PartyDetails = lazy(() => import('./pages/dashboard/parties/[id]/page'));
+const PartyLedger = lazy(() => import('./pages/dashboard/parties/[id]/ledger/page'));
 const Suppliers = lazy(() => import('./pages/dashboard/suppliers/page'));
 const SupplierNew = lazy(() => import('./pages/dashboard/suppliers/new/page'));
 const SupplierDetails = lazy(() => import('./pages/dashboard/suppliers/[id]/page'));
@@ -61,6 +62,7 @@ function App() {
           <Route path="parties" element={<Parties />} />
           <Route path="parties/new" element={<PartyNew />} />
           <Route path="parties/:id" element={<PartyDetails />} />
+          <Route path="parties/:id/ledger" element={<PartyLedger />} />
           <Route path="suppliers" element={<Suppliers />} />
           <Route path="suppliers/new" element={<SupplierNew />} />
           <Route path="suppliers/:id" element={<SupplierDetails />} />

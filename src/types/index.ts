@@ -103,6 +103,7 @@ export interface Party {
   id: string;
   partyNumber: number;
   name: string;
+  type?: 'customer' | 'supplier';
   contactPerson?: string;
   phone?: string;
   email?: string;

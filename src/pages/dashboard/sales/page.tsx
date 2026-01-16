@@ -566,6 +566,7 @@ export default function SalesPage() {
               date: new Date().toISOString().split('T')[0],
               type: 'sale',
               companyName: company,
+              invoiceNo: editableInvoiceNo,
               description: transactionDescription,
               amount: finalNetTotal,
               paymentReceived: 0,
